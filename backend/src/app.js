@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 
-app.use("/api/v1", apiRouter);
+app.use("/api/", apiRouter);
 app.use(errorHandler);
 
 export default app;
