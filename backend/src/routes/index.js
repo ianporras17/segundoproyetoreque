@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import authRoutes from "../modules/auth/auth.routes.js";
+import { labsRouter } from "../modules/labs/labs.routes.js";
 
 export const router = Router();
 
@@ -13,3 +14,4 @@ router.get("/health", async (_req, res, next) => {
 });
 
 router.use("/auth", authRoutes);
+router.use("/labs", labsRouter);
