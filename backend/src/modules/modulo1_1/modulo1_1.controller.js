@@ -1,4 +1,4 @@
-import * as M from "./labs.model.js";
+import * as M from "./modulo1_1.model.js";
 
 const bad = (res, msg) => res.status(400).json({ error: msg });
 

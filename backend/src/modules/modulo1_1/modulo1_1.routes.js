@@ -1,5 +1,5 @@
 import { Router } from "express";
-import * as C from "./labs.controller.js";
+import * as C from "./modulo1_1.controller.js";
 
 export const labsRouter = Router();
 
