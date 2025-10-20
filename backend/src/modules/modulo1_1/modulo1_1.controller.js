@@ -76,9 +76,11 @@ function pick(src = {}, allowed = []) {
 export async function deleteLab(req, res, next) {
   try {
     const labId = String(req.params.labId);
-    await M.deleteLab(labId);
+    await M.deleteLab(labId, req.user?.id || null);
     return res.json({ ok: true });
-  } catch (e) { return mapPg(e, res, next); }
+  } catch (e) {
+    return mapPg(e, res, next);
+  }
 }
 
 /** ============= TECNICOS_LABS CRUD ============= */
@@ -125,15 +127,19 @@ export async function removeTechnicianFromLab(req, res, next) {
 }
 
 /** ============= REQUISITOS (POLÍTICAS) CRUD ============= */
+const TIPOS = new Set(["academico","seguridad","otro"]);
+ 
 export async function createPolicy(req, res, next) {
   try {
     const labId = String(req.params.labId);
-    const { nombre, descripcion = null, tipo = "otro", obligatorio = true, vigente_desde = null, vigente_hasta = null } = req.body || {};
+    let { nombre, descripcion = null, tipo = "otro", obligatorio = true, vigente_desde = null, vigente_hasta = null } = req.body || {};
     if (!nombre) return bad(res, "nombre requerido");
+    if (!TIPOS.has(String(tipo))) return bad(res, "tipo inválido (academico|seguridad|otro)");
     const out = await M.createPolicy(labId, { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta });
-    return res.status(201).json(out); // { id }
+    return res.status(201).json(out);
   } catch (e) { return mapPg(e, res, next); }
 }
+
 
 export async function listPolicies(req, res, next) {
   try {
@@ -147,8 +153,9 @@ export async function updatePolicy(req, res, next) {
     const labId = String(req.params.labId);
     const policyId = String(req.params.policyId);
     const { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta } = req.body || {};
+    if (tipo !== undefined && !TIPOS.has(String(tipo))) return bad(res, "tipo inválido (academico|seguridad|otro)");
     const out = await M.updatePolicy(labId, policyId, { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta });
-    return res.json(out); // { id }
+    return res.json(out);
   } catch (e) { return mapPg(e, res, next); }
 }
 

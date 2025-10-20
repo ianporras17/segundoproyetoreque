@@ -151,14 +151,45 @@ export async function updateLab(labId, patch) {
   return rows[0] || null;
 }
 
-export async function deleteLab(labId) {
-  await pool.query(`DELETE FROM ${TB.labs} WHERE ${COL.labs.id}=$1`, [labId]);
-  await pool.query(
-    `INSERT INTO ${TB.history} (${COL.history.labId}, ${COL.history.accion})
-     VALUES ($1, 'actualizacion_lab')`,
-    [labId]
-  );
+export async function deleteLab(labId, byUserId = null) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1) Verifica existencia
+    const exists = await client.query(
+      `SELECT 1 FROM ${TB.labs} WHERE ${COL.labs.id}=$1`,
+      [labId]
+    );
+    if (exists.rowCount === 0) {
+      const e = new Error("Laboratorio no encontrado");
+      e.status = 404;
+      throw e;
+    }
+
+    // 2) Historial ANTES del borrado (usa un valor permitido en 'accion')
+    await client.query(
+      `INSERT INTO ${TB.history}
+         (${COL.history.labId}, ${COL.history.userId}, ${COL.history.accion}, ${COL.history.detalle})
+       VALUES ($1, $2, 'actualizacion_lab', $3::jsonb)`,
+      [labId, byUserId, JSON.stringify({ evento: "eliminacion_lab" })]
+    );
+
+    // 3) Borrar el laboratorio
+    await client.query(
+      `DELETE FROM ${TB.labs} WHERE ${COL.labs.id}=$1`,
+      [labId]
+    );
+
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
+
 
 /* ==================== TECNICOS_LABS ==================== */
 export async function assertUserIsTechOrAdmin(userId) {
@@ -224,37 +255,55 @@ export async function listTechniciansOfLab(labId) {
 
 export async function updateTechnicianAssignment(labId, tecLabId, { cargo, activo, asignado_hasta }) {
   const sets = [], vals = []; let i = 1;
-  if (cargo !== undefined) { sets.push(`${COL.techLabs.cargo}=$${i++}`); vals.push(cargo); }
-  if (activo !== undefined) { sets.push(`${COL.techLabs.activo}=$${i++}`); vals.push(!!activo); }
-  if (asignado_hasta !== undefined) { sets.push(`${COL.techLabs.hasta}=$${i++}`); vals.push(asignado_hasta); }
+  if (cargo !== undefined)         { sets.push(`${COL.techLabs.cargo}=$${i++}`); vals.push(cargo); }
+  if (activo !== undefined)        { sets.push(`${COL.techLabs.activo}=$${i++}`); vals.push(!!activo); }
+  if (asignado_hasta !== undefined){ sets.push(`${COL.techLabs.hasta}=$${i++}`); vals.push(asignado_hasta); }
   if (!sets.length) return { id: tecLabId };
 
   vals.push(labId, tecLabId);
-  await pool.query(
+  const { rowCount } = await pool.query(
     `UPDATE ${TB.techLabs} SET ${sets.join(", ")}
-      WHERE ${COL.techLabs.labId}=$${i++} AND ${COL.techLabs.id}=$${i}`,
+      WHERE ${COL.techLabs.labId}=$${i++} AND ${COL.techLabs.id}=$${i}
+      RETURNING ${COL.techLabs.id}`,
     vals
   );
+
+  if (rowCount === 0) {
+    const e = new Error("Asignación no encontrada");
+    e.status = 404;
+    throw e;
+  }
+
   await pool.query(
     `INSERT INTO ${TB.history} (${COL.history.labId}, ${COL.history.accion}, ${COL.history.detalle})
      VALUES ($1, 'actualizacion_lab', $2)`,
-    [labId, JSON.stringify({ tecnico_lab_id: tecLabId, op: "actualizado", fields: sets.map(s => s.split("=")[0]) })]
+    [labId, JSON.stringify({ tecnico_lab_id: tecLabId, op: "actualizado", /* fields opcional */ })]
   );
   return { id: tecLabId };
 }
 
+
 export async function removeTechnicianFromLab(labId, tecLabId) {
-  await pool.query(
+  const { rows, rowCount } = await pool.query(
     `DELETE FROM ${TB.techLabs}
-      WHERE ${COL.techLabs.id}=$1 AND ${COL.techLabs.labId}=$2`,
+      WHERE ${COL.techLabs.id}=$1 AND ${COL.techLabs.labId}=$2
+      RETURNING ${COL.techLabs.id}`,
     [tecLabId, labId]
   );
+
+  if (rowCount === 0) {
+    const e = new Error("Asignación no encontrada");
+    e.status = 404;
+    throw e;
+  }
+
   await pool.query(
     `INSERT INTO ${TB.history} (${COL.history.labId}, ${COL.history.accion}, ${COL.history.detalle})
      VALUES ($1, 'actualizacion_lab', $2)`,
-    [labId, JSON.stringify({ tecnico_lab_id: tecLabId, op: "removido" })]
+    [labId, JSON.stringify({ tecnico_lab_id: rows[0].id, op: "removido" })]
   );
 }
+
 
 /* ==================== REQUISITOS (POLÍTICAS) ==================== */
 export async function createPolicy(labId, { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta }) {
@@ -286,22 +335,29 @@ export async function listPolicies(labId) {
   return rows;
 }
 
-export async function updatePolicy(labId, policyId, { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta }) {
+export async function updatePolicy(labId, policyId, patch) {
+  const { nombre, descripcion, tipo, obligatorio, vigente_desde, vigente_hasta } = patch || {};
   const sets = [], vals = []; let i = 1;
-  if (nombre !== undefined) { sets.push(`${COL.policies.nombre}=$${i++}`); vals.push(nombre); }
-  if (descripcion !== undefined) { sets.push(`${COL.policies.descripcion}=$${i++}`); vals.push(descripcion); }
-  if (tipo !== undefined) { sets.push(`${COL.policies.tipo}=$${i++}`); vals.push(tipo); }
-  if (obligatorio !== undefined) { sets.push(`${COL.policies.obligatorio}=$${i++}`); vals.push(!!obligatorio); }
-  if (vigente_desde !== undefined) { sets.push(`${COL.policies.desde}=$${i++}`); vals.push(vigente_desde); }
-  if (vigente_hasta !== undefined) { sets.push(`${COL.policies.hasta}=$${i++}`); vals.push(vigente_hasta); }
+  if (nombre !== undefined)         { sets.push(`${COL.policies.nombre}=$${i++}`); vals.push(nombre); }
+  if (descripcion !== undefined)    { sets.push(`${COL.policies.descripcion}=$${i++}`); vals.push(descripcion); }
+  if (tipo !== undefined)           { sets.push(`${COL.policies.tipo}=$${i++}`); vals.push(tipo); }
+  if (obligatorio !== undefined)    { sets.push(`${COL.policies.obligatorio}=$${i++}`); vals.push(!!obligatorio); }
+  if (vigente_desde !== undefined)  { sets.push(`${COL.policies.desde}=$${i++}`); vals.push(vigente_desde); }
+  if (vigente_hasta !== undefined)  { sets.push(`${COL.policies.hasta}=$${i++}`); vals.push(vigente_hasta); }
   if (!sets.length) return { id: policyId };
 
   vals.push(labId, policyId);
-  await pool.query(
+  const { rowCount } = await pool.query(
     `UPDATE ${TB.policies} SET ${sets.join(", ")}
-      WHERE ${COL.policies.labId}=$${i++} AND ${COL.policies.id}=$${i}`,
+      WHERE ${COL.policies.labId}=$${i++} AND ${COL.policies.id}=$${i}
+      RETURNING ${COL.policies.id}`,
     vals
   );
+  if (rowCount === 0) {
+    const e = new Error("Política no encontrada");
+    e.status = 404; throw e;
+  }
+
   await pool.query(
     `INSERT INTO ${TB.history} (${COL.history.labId}, ${COL.history.accion}, ${COL.history.detalle})
      VALUES ($1, 'politica_actualizada', $2)`,
@@ -310,18 +366,25 @@ export async function updatePolicy(labId, policyId, { nombre, descripcion, tipo,
   return { id: policyId };
 }
 
+
 export async function deletePolicy(labId, policyId) {
-  await pool.query(
+  const { rowCount } = await pool.query(
     `DELETE FROM ${TB.policies}
-      WHERE ${COL.policies.id}=$1 AND ${COL.policies.labId}=$2`,
+      WHERE ${COL.policies.id}=$1 AND ${COL.policies.labId}=$2
+      RETURNING ${COL.policies.id}`,
     [policyId, labId]
   );
+  if (rowCount === 0) {
+    const e = new Error("Política no encontrada");
+    e.status = 404; throw e;
+  }
   await pool.query(
     `INSERT INTO ${TB.history} (${COL.history.labId}, ${COL.history.accion}, ${COL.history.detalle})
      VALUES ($1, 'politica_actualizada', $2)`,
     [labId, JSON.stringify({ policy_id: policyId, op: "deleted" })]
   );
 }
+
 
 /* ==================== HISTORIAL ==================== */
 export async function listHistory(labId, { limit = 50, offset = 0 } = {}) {

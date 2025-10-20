@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import authRoutes from "../modules/auth/auth.routes.js";
-import { labsRouter } from "../modules/labs/labs.routes.js";
+import { labsRouter } from "../modules/modulo1_1/modulo1_1.routes.js";
 
 export const router = Router();
 

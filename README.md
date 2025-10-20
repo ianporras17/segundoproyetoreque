@@ -4,9 +4,201 @@ API en **Node.js + Express** con **PostgreSQL** en Docker. Incluye healthcheck y
 
 ## Requisitos
 - Docker Desktop (o Docker + Docker Compose).
-- (Opcional) Node 20+ si quieres correr el backend fuera de Docker.
 
-## Variables de entorno
+### Base
+
+Base URL: http://localhost:3000/api
+
+Auth: usar Bearer JWT en el header Authorization: Bearer <token>
+
+Content-Type: application/json en POST/PATCH
+
+### Auth – Register
+
+POST /api/auth/register
+Auth: No
+Body:
+
+{
+  "nombre": "Ana López",
+  "correo": "ana.lopez@estudiante.tec.ac.cr",
+  "password": "Secreta123!",
+  "codigo": "2024182540",
+  "rol": "estudiante",
+  "carrera": "Ingeniería en Computadores",
+  "telefono": "88881234"
+}
+
+
+Respuestas: 201 Created con { user, message } / errores 400|409|422
+
+### Auth – Login (retorna token)
+
+POST /api/auth/login
+Auth: No
+Body:
+
+{ "correo": "admin.labs@tec.ac.cr", "password": "Secreta123!" }
+
+
+Respuestas: 200 OK con { token, token_type: "Bearer", expires_in, user } / 401|403
+
+### Auth – Me
+
+GET /api/auth/me
+Auth: Sí (cualquier rol)
+
+### Auth – Logout
+
+POST /api/auth/logout
+Auth: Sí
+
+### Auth – Ping Admin
+
+GET /api/auth/admin/ping
+Auth: Sí (solo admin)
+
+### Labs – Crear laboratorio
+
+POST /api/labs
+Auth: Sí (solo admin)
+Body:
+
+{
+  "nombre": "Laboratorio A",
+  "codigo_interno": "LAB-A-001",
+  "ubicacion": "Edificio A, piso 1",
+  "descripcion": "Perfil base"
+}
+
+
+Respuestas: 201 Created con { id, created_at, updated_at } / 400|409
+
+### Labs – Listar laboratorios
+
+GET /api/labs
+Auth: Sí (cualquier rol)
+
+### Labs – Detalle de laboratorio
+
+GET /api/labs/:labId
+Auth: Sí (cualquier rol)
+Respuesta: { lab, technicians: [...], policies: [...] }
+
+### Labs – Actualizar laboratorio
+
+PATCH /api/labs/:labId
+Auth: Sí (admin o tecnico)
+Body (ejemplos, enviar solo lo que cambie):
+
+{ "nombre": "Laboratorio A - Actualizado" }
+
+{ "ubicacion": "Edificio A, piso 3" }
+
+{ "descripcion": "Con kits nuevos" }
+
+{ "codigo_interno": "LAB-A-001-2025" }
+
+
+Respuestas: 200 OK con detalle del lab / 400|404
+
+### Labs – Eliminar laboratorio
+
+DELETE /api/labs/:labId
+Auth: Sí (solo admin)
+Respuestas: 200 OK con { ok: true } / 404
+
+### Técnicos del Lab – Asignar técnico
+
+POST /api/labs/:labId/technicians
+Auth: Sí (admin o tecnico)
+Body (mínimo):
+
+{
+  "usuario_id": "<uuid-del-usuario>",
+  "activo": true
+}
+
+
+Respuestas: 201 Created con { id: "<tecLabId>" } / 400|409
+
+### Técnicos del Lab – Listar
+
+GET /api/labs/:labId/technicians
+Auth: Sí (cualquier rol)
+
+### Técnicos del Lab – Actualizar asignación
+
+PATCH /api/labs/:labId/technicians/:tecLabId
+Auth: Sí (admin o tecnico)
+Body (enviar solo lo que cambie):
+
+{ "activo": false }
+
+{ "asignado_hasta": "2025-12-31T23:59:00Z" }
+
+
+Respuestas: 200 OK con { id } / 404
+
+### Técnicos del Lab – Remover asignación
+
+DELETE /api/labs/:labId/technicians/:tecLabId
+Auth: Sí (solo admin)
+Respuestas: 200 OK con { ok: true } / 404
+
+### Políticas – Crear
+
+POST /api/labs/:labId/policies
+Auth: Sí (admin o tecnico)
+Body:
+
+{
+  "nombre": "Inducción de seguridad",
+  "descripcion": "Charla obligatoria",
+  "tipo": "seguridad",   // academico | seguridad | otro
+  "obligatorio": true,
+  "vigente_desde": "2025-10-01T00:00:00Z",
+  "vigente_hasta": null
+}
+
+
+Respuestas: 201 Created con { id } / 400
+
+### Políticas – Listar
+
+GET /api/labs/:labId/policies
+Auth: Sí (cualquier rol)
+
+### Políticas – Actualizar
+
+PATCH /api/labs/:labId/policies/:policyId
+Auth: Sí (admin o tecnico)
+Body (ejemplos) CADA UNO ES PARADO O UNEN TODOS EN UNO:
+
+{ "descripcion": "Inducción obligatoria con examen" }
+
+{ "tipo": "academico" }
+
+{ "obligatorio": false }
+
+{ "vigente_hasta": "2026-12-31T23:59:59Z" }
+
+
+Respuestas: 200 OK con { id } / 404
+
+### Políticas – Eliminar
+
+DELETE /api/labs/:labId/policies/:policyId
+Auth: Sí (admin o tecnico)
+Respuestas: 200 OK con { ok: true } / 404
+
+### Historial del laboratorio
+
+GET /api/labs/:labId/history?limit=50&offset=0
+Auth: Sí (cualquier rol)
+Respuesta: arreglo de eventos { id, usuario_id, accion, detalle, creado_en }
+
+
 
 ### `.env` en la raíz (lo usa docker-compose)
 ```env
@@ -85,3 +277,5 @@ backend/
 docker-compose.yml            # orquesta db, api (y pgadmin opcional)
 .env                          # variables globales para docker-compose
 README.md
+
+
