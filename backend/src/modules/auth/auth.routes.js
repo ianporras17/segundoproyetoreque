@@ -8,9 +8,5 @@ router.post("/login",    loginUser);
 router.post("/logout",   logoutUser);
 router.get("/me",        requireAuth, meUser);
 
-// Ejemplo de ruta protegida por rol
-router.get("/admin/ping", requireAuth, requireRole(["admin"]), (_req, res) => {
-  res.json({ ok: true, message: "Hola admin" });
-});
 
 export default router;
