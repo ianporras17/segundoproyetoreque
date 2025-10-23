@@ -1,6 +1,6 @@
 import { pool } from "../../db/index.js";
 
-/** Tablas/columnas según tu esquema */
+/** Tablas/columnas según esquema */
 const TB = {
   labs: "laboratorios",
   techLabs: "tecnicos_labs",
