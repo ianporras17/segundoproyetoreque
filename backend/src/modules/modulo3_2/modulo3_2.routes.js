@@ -25,3 +25,7 @@ router.get("/labs/:labId/horarios", getLabScheduleRange);
 router.get("/labs/:labId/policies", getLabPolicies);
 
 export default router;
+
+
+
+
