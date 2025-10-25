@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import authRoutes from "../modules/auth/auth.routes.js";
 import { labsRouter } from "../modules/modulo1_1/modulo1_1.routes.js";
+import modulo1_2Router from "../modules/modulo1_2/modulo1_2.routes.js";
 
 export const router = Router();
 
@@ -15,3 +16,4 @@ router.get("/health", async (_req, res, next) => {
 
 router.use("/auth", authRoutes);
 router.use("/labs", labsRouter);
+router.use("/labs", modulo1_2Router);
